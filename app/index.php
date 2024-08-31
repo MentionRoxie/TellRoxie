@@ -2,23 +2,22 @@
 
 declare(strict_types=1);
 
-date_default_timezone_set('Iran');
-
 require_once '../vendor/autoload.php';
 
+$database = new Database();
 $telegram = new Telegram(BOT_TOKEN);
 
 $data = $telegram->getData();
 $chatId = $telegram->ChatID();
 $hashedChatId = hashChatId($chatId);
 $text = $telegram->Text();
-$userState = getUserState($hashedChatId);
+
+$userState = getUserState($database, $hashedChatId);
 
 if ($text === '/start') {
     startBot($telegram, $chatId);
 
-    setUserState($hashedChatId, 'started');
-    clearMessages($hashedChatId);
+    clearMessages($database, $hashedChatId);
 
     exit;
 }
@@ -26,16 +25,16 @@ if ($text === '/start') {
 if ($text === '/cancel') {
     cancelProcess($telegram, $chatId);
 
-    clearUserState($hashedChatId);
-    clearMessages($hashedChatId);
+    clearUserState($database, $hashedChatId);
+    clearMessages($database, $hashedChatId);
     exit;
 }
 
 if ($text === '/send_message') {
     sendMessageCommand($telegram, $chatId);
 
-    setUserState($chatId, 'sendingMessage');
-    clearMessages($chatId);
+    setUserState($database, $hashedChatId, 'sendingMessage');
+    clearMessages($database, $hashedChatId);
 
     exit;
 }
@@ -43,8 +42,17 @@ if ($text === '/send_message') {
 if ($text === 'sendMessage') {
     sendMessageCallback($telegram, $chatId, $data);
 
-    setUserState($hashedChatId, 'sendingMessage');
-    clearMessages($hashedChatId);
+    setUserState($database, $hashedChatId, 'sendingMessage');
+    clearMessages($database, $hashedChatId);
+
+    exit;
+}
+
+if ($text === 'botSource') {
+    sendBotSource($telegram, $chatId);
+
+    setUserState($database, $hashedChatId, 'sendingMessage');
+    clearMessages($database, $hashedChatId);
 
     exit;
 }
@@ -52,21 +60,21 @@ if ($text === 'sendMessage') {
 if ($userState['state'] === 'sendingMessage') {
     messageSent($telegram, $chatId, $data);
 
-    setUserState($hashedChatId, 'messageSent');
+    setUserState($database, $hashedChatId, 'messageSent');
 
     exit;
 }
 
 if ($text === '/done' && $userState['state'] === 'messageSent') {
-    sendMessageAnonymously($telegram, $chatId);
+    sendMessageAnonymously($telegram, $database, $chatId);
 
-    clearUserState($hashedChatId);
-    clearMessages($hashedChatId);
+    clearUserState($database, $hashedChatId);
+    clearMessages($database, $hashedChatId);
 
     exit;
 }
 
 $telegram->sendMessage([
     'chat_id' => $chatId,
-    'text' => "I'm not sure what you want to do... 🤔, start the bot to perform an action: /start"
+    'text' => "I'm not sure what you want to do... 🤔, to send a message just write: /send_message"
 ]);

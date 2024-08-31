@@ -16,6 +16,12 @@ function startBot(Telegram $telegram, string|int $chatId): void
                 text: 'Send Message ✉️',
                 callback_data: 'sendMessage'
             )
+        ],
+        [
+            $telegram->buildInlineKeyboardButton(
+                text: "Bot source code 🤖",
+                callback_data: 'botSource'
+            )
         ]
     ];
 
@@ -24,7 +30,7 @@ function startBot(Telegram $telegram, string|int $chatId): void
     $telegram->sendMessage([
         'chat_id' => $chatId,
         'reply_markup' => $keyboard,
-        'text' => "Hi 👋🏻, Welcome to TellRoxie bot 💖\n\nWith the button below you can send an anonymous message to @TheRoxieRoxy 💫\n\nDon't worry 😉, He won't know your identity!"
+        'text' => "Hi 👋🏻, Welcome to TellRoxie bot 💖\n\nWith the button below you can send an anonymous message to @" . OWNER_USERNAME . " 💫\n\nDon't worry 😉, He won't know your identity!"
     ]);
 }
 
@@ -73,6 +79,22 @@ function sendMessageCallback(Telegram $telegram, string|int $chatId, array $data
 }
 
 /**
+ * Sends the robot's Github repository
+ * @param Telegram $telegram Instance of Telegram class
+ * @param string|int $chatId User's chat id
+ * @return void Nothing returns
+ */
+function sendBotSource(Telegram $telegram, string|int $chatId): void
+{
+    $telegram->sendMessage([
+        'chat_id' => $chatId,
+        'text' => "This bot is open-source ✅\n\nYou can find the bot's source code here: https://github.com/MentionRoxie/TellRoxie 🤖\n\nFeel free to contribute or report bugs 🙂",
+    ]);
+
+    exit;
+}
+
+/**
  * Triggers when user sends an anonymous message
  * @param Telegram $telegram Instance of Telegram class
  * @param string|int $chatId User's chat id
@@ -113,13 +135,9 @@ function messageSent(Telegram $telegram, string|int $chatId, array $data): void
  * @param string|int $chatId User's chat id
  * @return void Nothing returns
  */
-function sendMessageAnonymously(Telegram $telegram, string|int $chatId): void
+function sendMessageAnonymously(Telegram $telegram, Database $database, string|int $chatId): void
 {
-    $pdo = new PDO("mysql:host=localhost;dbname={$_ENV['DB_NAME']}", $_ENV['DB_USERNAME'], $_ENV['DB_PASSWORD']);
-    $stmt = $pdo->prepare("SELECT * FROM messages_to_send WHERE hashed_id = ?");
-    $stmt->execute([hashChatId($chatId)]);
-
-    $messageToSend = $stmt->fetch(PDO::FETCH_ASSOC);
+    $messageToSend = $database->query("SELECT * FROM messages_to_send WHERE hashed_id = ?", [hashChatId($chatId)])->find();
 
     $types = [
         'sticker',
@@ -165,16 +183,20 @@ function hashChatId(string|int $chatId): string
  * @param string $state The state to set
  * @return void Nothing returns
  */
-function setUserState(string $hashedId, string $state): void
+function setUserState(Database $database, string $hashedId, string $state): void
 {
     // Check if the user is already in the database
-    $user = getUserState($hashedId);
+    $user = getUserState($database, $hashedId);
     if ($user)
-        clearUserState($hashedId);
+        clearUserState($database, $hashedId);
 
-    $pdo = new PDO("mysql:host=localhost;dbname={$_ENV['DB_NAME']}", $_ENV['DB_USERNAME'], $_ENV['DB_PASSWORD']);
-    $stmt = $pdo->prepare("INSERT INTO `user_states` (`hashed_id`, `state`) VALUES (?, ?)");
-    $stmt->execute([$hashedId, $state]);
+    $database->query(
+        "INSERT INTO `user_states` (`hashed_id`, `state`) VALUES (?, ?)",
+        [
+            $hashedId,
+            $state
+        ]
+    );
 }
 
 /**
@@ -182,13 +204,12 @@ function setUserState(string $hashedId, string $state): void
  * @param string $hashedId Hashed chat id
  * @return mixed User's state
  */
-function getUserState(string $hashedId): mixed
+function getUserState(Database $database, string $hashedId): array|bool
 {
-    $pdo = new PDO("mysql:host=localhost;dbname={$_ENV['DB_NAME']}", $_ENV['DB_USERNAME'], $_ENV['DB_PASSWORD']);
-    $stmt = $pdo->prepare("SELECT `state` FROM `user_states` WHERE `hashed_id` = ?");
-    $stmt->execute([$hashedId]);
-
-    return $stmt->fetch();
+    return $database->query(
+        "SELECT `state` FROM `user_states` WHERE `hashed_id` = ?",
+        [$hashedId]
+    )->find();
 }
 
 /**
@@ -196,12 +217,9 @@ function getUserState(string $hashedId): mixed
  * @param string $hashedId Hashed chat id
  * @return void Nothing returns
  */
-function clearUserState(string $hashedId): void
+function clearUserState(Database $database, string $hashedId): void
 {
-    $pdo = new PDO("mysql:host=localhost;dbname={$_ENV['DB_NAME']}", $_ENV['DB_USERNAME'], $_ENV['DB_PASSWORD']);
-    $stmt = $pdo->prepare("DELETE FROM `user_states` WHERE `hashed_id` = ?");
-
-    $stmt->execute([$hashedId]);
+    $database->query("DELETE FROM `user_states` WHERE `hashed_id` = ?", [$hashedId]);
 }
 
 /**
@@ -209,10 +227,7 @@ function clearUserState(string $hashedId): void
  * @param string $hashedId Hashed chat id
  * @return void Nothing returns
  */
-function clearMessages(string $hashedId): void
+function clearMessages(Database $database, string $hashedId): void
 {
-    $pdo = new PDO("mysql:host=localhost;dbname={$_ENV['DB_NAME']}", $_ENV['DB_USERNAME'], $_ENV['DB_PASSWORD']);
-    $stmt = $pdo->prepare("DELETE FROM `messages_to_send` WHERE `hashed_id` = ?");
-
-    $stmt->execute([$hashedId]);
+    $database->query("DELETE FROM `messages_to_send` WHERE `hashed_id` = ?", [$hashedId]);
 }
